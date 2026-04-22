@@ -1,0 +1,15 @@
+{
+  "success": true,
+  "message": "Data wilayah berhasil diambil.",
+  "data": [
+    {
+      "id": "09cc16e7-8ee0-41ea-91da-6079918f93ac",
+      "name": "gedung tataan",
+      "address": "gedung tataan",
+      "latitude": -5.362145,
+      "longitude": 104.975402,
+      "createdAt": "2026-04-16T10:37:14.388Z",
+      "updatedAt": "2026-04-16T10:37:14.388Z"
+    }
+  ]
+}

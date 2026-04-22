@@ -1,0 +1,19 @@
+{
+  "success": true,
+  "message": "Berhasil mengambil daftar event",
+  "data": [
+    {
+      "id": "d2e12e30-bf70-4c24-8b61-d3cca3b4f337",
+      "title": "Donor Darah Bem Universitas Aisyah Pringsewu",
+      "description": null,
+      "locationName": "Kampus Universitas Aisyah",
+      "latitude": -5.418729,
+      "longitude": 105104311,
+      "startDate": "2026-04-16T14:53:00.000Z",
+      "endDate": "2026-04-22T14:53:00.000Z",
+      "status": "UPCOMING",
+      "createdAt": "2026-04-16T14:57:47.090Z",
+      "updatedAt": "2026-04-16T14:57:47.090Z"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "success": true,
+  "message": "Berhasil mengambil riwayat notifikasi",
+  "data": [
+    {
+      "id": "fba90e3f-04ca-4b87-a1ea-a3c0d3f075fb",
+      "title": "sss",
+      "message": "sss",
+      "type": "INFO",
+      "targetUsers": "ALL",
+      "createdAt": "2026-04-16T12:54:36.681Z"
+    },
+    {
+      "id": "a52020ee-7981-4dd6-be8d-a079db37eac2",
+      "title": "butuh golongan darah A+",
+      "message": "untuk pesan ini mohon di baca",
+      "type": "INFO",
+      "targetUsers": "ALL",
+      "createdAt": "2026-04-16T12:28:36.900Z"
+    }
+  ]
+}

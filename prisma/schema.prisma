@@ -1,0 +1,360 @@
+// prisma/schema.prisma
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// ENUMERASI (Enum)
+// ============================================================
+
+enum Role {
+  ADMIN_PMI
+  USER
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum BloodType {
+  A
+  B
+  AB
+  O
+}
+
+
+enum BloodProduct {
+  WB // Whole Blood
+  PRC // Packed Red Cells
+  TC // Thrombocyte Concentrate
+  FFP // Fresh Frozen Plasma
+}
+
+enum ParticipantStatus {
+  REGISTERED // Baru daftar via aplikasi
+  ATTENDED   // Sukses donasi (divalidasi admin)
+  ABSENT     // Tidak hadir atau tidak lulus tahap medis on-site
+}
+
+// ============================================================
+// MODEL: USERS
+// Khusus untuk kredensial & autentikasi. Tabel ini seringan mungkin.
+// ============================================================
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         Role     @default(USER)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  donorProfile      DonorProfile?
+  donationHistories DonationHistory[]
+  eventParticipants EventParticipant[]
+  notifications     Notification[]
+  uddRegistrations  UddRegistration[]
+
+  @@map("users")
+}
+
+// ============================================================
+// MODEL: DONOR_PROFILES
+// Data biodata & medis pendonor. Dipisah dari Users agar
+// tabel autentikasi tetap ringan dan query auth lebih cepat.
+// ============================================================
+
+model DonorProfile {
+  id               String     @id @default(uuid())
+  userId           String     @unique @map("user_id")
+  nik              String     @unique // 16 digit, divalidasi via Zod di API layer
+  fullName         String     @map("full_name")
+  whatsappNumber   String     @unique @map("whatsapp_number")
+  bloodType        BloodType? @map("blood_type")
+  
+  // Biodata Lanjutan
+  gender           Gender?
+  birthPlace       String?    @map("birth_place")
+  birthDate        DateTime?  @map("birth_date")
+  address          String?
+  village          String?    // Kelurahan
+  subdistrict      String?    // Kecamatan
+  city             String?    // Kabupaten/Kota
+  job              String?    // Pekerjaan
+  maritalStatus    String?    @map("marital_status") // Lajang/Menikah/Cerai
+
+  lastDonationDate DateTime?  @map("last_donation_date")
+
+  // Denormalisasi untuk performa — di-increment saat admin validasi donor,
+  // bukan dihitung COUNT(*) setiap query.
+  totalDonations Int @default(0) @map("total_donations")
+
+  // Lokasi pendonor untuk fitur "cari pendonor terdekat"
+  latitude  Float?
+  longitude Float?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("donor_profiles")
+}
+
+// ============================================================
+// MODEL: UDD_REGIONS
+// Data wilayah dan lokasi UDD/UTD PMI.
+// ============================================================
+
+model UddRegion {
+  id        String  @id @default(uuid())
+  kodeUdd   String  @unique @map("kode_udd")
+  name      String // Contoh: "UTD PMI Kabupaten Pringsewu"
+  address   String?
+  latitude  Float?
+  longitude Float?
+
+  bloodStocks       BloodStock[]
+  donorEvents       DonorEvent[]
+  uddRegistrations  UddRegistration[]
+  donationHistories DonationHistory[]
+  stockRequests     StockRequest[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("udd_regions")
+}
+
+// ============================================================
+// MODEL: BLOOD_STOCKS
+// Matriks dinamis: Wilayah UDD x Golongan Darah x Jenis Produk.
+// Gunakan prisma.bloodStock.upsert() saat Admin update stok.
+// ============================================================
+
+model BloodStock {
+  id          String       @id @default(uuid())
+  regionId    String       @map("region_id")
+  bloodType   BloodType    @map("blood_type")
+  productType BloodProduct @map("product_type")
+  quantity    Int          @default(0)
+  lastUpdated DateTime     @updatedAt @map("last_updated")
+
+  region UddRegion @relation(fields: [regionId], references: [id], onDelete: Cascade)
+
+  // CONSTRAINT KRITIS: kombinasi ini harus selalu unik
+  @@unique([regionId, bloodType, productType])
+  @@index([bloodType, productType])
+  @@map("blood_stocks")
+}
+
+// ============================================================
+// MODEL: DONATION_HISTORIES
+// Source of truth untuk reward dan validasi kelayakan donor.
+// ============================================================
+
+model DonationHistory {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  locationName String   @map("location_name")
+  donationDate DateTime @default(now()) @map("donation_date")
+  
+  // Tracing asal donasi
+  regionId     String?  @map("region_id")       // FK ke UddRegion (null jika tidak diketahui)
+  sourceType   String   @default("MANUAL") @map("source_type") // EVENT | UDD | MANUAL
+
+  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  region UddRegion? @relation(fields: [regionId], references: [id], onDelete: SetNull)
+
+  @@map("donation_histories")
+}
+
+// ============================================================
+// MODEL: STOCK_REQUESTS
+// Permintaan Distribution Center ke UDD untuk mengambil stok WB.
+// ============================================================
+
+model StockRequest {
+  id          String    @id @default(uuid())
+  regionId    String    @map("region_id")
+  bloodType   BloodType @map("blood_type")
+  quantity    Int
+  status      String    @default("PENDING") @map("status") // PENDING | APPROVED | REJECTED
+  notes       String?
+  requestedBy String?   @map("requested_by")
+  requestedAt DateTime  @default(now()) @map("requested_at")
+  approvedAt  DateTime? @map("approved_at")
+  rejectedAt  DateTime? @map("rejected_at")
+
+  region UddRegion        @relation(fields: [regionId], references: [id], onDelete: Cascade)
+  logs   StockRequestLog[]
+
+  @@index([regionId, status])
+  @@map("stock_requests")
+}
+
+// ============================================================
+// MODEL: STOCK_REQUEST_LOGS
+// Riwayat pengambilan yang sudah disetujui (audit trail).
+// ============================================================
+
+model StockRequestLog {
+  id             String    @id @default(uuid())
+  stockRequestId String    @map("stock_request_id")
+  regionId       String    @map("region_id")
+  regionName     String    @map("region_name")
+  bloodType      BloodType @map("blood_type")
+  quantity       Int
+  approvedAt     DateTime  @default(now()) @map("approved_at")
+  approvedBy     String?   @map("approved_by")
+
+  stockRequest StockRequest @relation(fields: [stockRequestId], references: [id], onDelete: Cascade)
+
+  @@map("stock_request_logs")
+}
+
+// ============================================================
+// MODEL: DC_STOCKS
+// Stok mentah WB di Distribution Center (hasil pengambilan dari UDD).
+// ============================================================
+
+model DistributionCenterStock {
+  id        String    @id @default(uuid())
+  bloodType BloodType @map("blood_type")
+  quantity  Int       @default(0)
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  @@unique([bloodType])
+  @@map("dc_stocks")
+}
+
+// ============================================================
+// MODEL: DC_INVENTORY
+// Inventori hasil pengolahan darah di DC (WB/PRC/TC/FFP).
+// Penambahan PRC/TC/FFP mengurangi stok mentah WB.
+// ============================================================
+
+model DCInventory {
+  id          String       @id @default(uuid())
+  bloodType   BloodType    @map("blood_type")
+  productType BloodProduct @map("product_type")
+  quantity    Int          @default(0)
+  notes       String?
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  @@unique([bloodType, productType])
+  @@map("dc_inventory")
+}
+
+// ============================================================
+// MODEL: DONOR_EVENTS
+// Jadwal Kegiatan Mobil Unit Donor Darah (Keliling)
+// ============================================================
+
+model DonorEvent {
+  id           String   @id @default(uuid())
+  title        String
+  description  String?
+  locationName String   @map("location_name")
+  latitude     Float?
+  longitude    Float?
+  startDate    DateTime @map("start_date")
+  endDate      DateTime @map("end_date")
+
+  // Status manual: UPCOMING, ONGOING, COMPLETED, CANCELLED
+  status String @default("UPCOMING")
+
+  // Relasi ke Cabang UDD (opsional)
+  uddRegionId String?    @map("udd_region_id")
+  uddRegion   UddRegion? @relation(fields: [uddRegionId], references: [id], onDelete: SetNull)
+
+  participants EventParticipant[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("donor_events")
+}
+
+// ============================================================
+// MODEL: EVENT_PARTICIPANTS
+// Pivot table pelacakan rekam jejak relawan pada suatu acara,
+// digunakan untuk monitoring admin di lapangan.
+// ============================================================
+
+model EventParticipant {
+  id           String            @id @default(uuid())
+  userId       String            @map("user_id")
+  eventId      String            @map("event_id")
+  status       ParticipantStatus @default(REGISTERED)
+  registeredAt DateTime          @default(now()) @map("registered_at")
+  updatedAt    DateTime          @updatedAt @map("updated_at")
+
+  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event DonorEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  // Pastikan satu orang hanya bisa mendaftar acara yang sama satu kali
+  @@unique([userId, eventId])
+  @@map("event_participants")
+}
+
+// ============================================================
+// MODEL: NOTIFICATIONS
+// Sistem Broadcast & Pengingat Darurat
+// Jika targetUserId diisi = notifikasi personal.
+// Jika null = broadcast ke semua (targetUsers bisa 'ALL').
+// ============================================================
+
+model Notification {
+  id           String  @id @default(uuid())
+  title        String
+  message      String
+  // Type: EMERGENCY, INFO, REMINDER
+  type         String  @default("INFO")
+  // Target: ALL, SPECIFIC_REGION, SPECIFIC_BLOOD
+  targetUsers  String  @default("ALL") @map("target_users")
+  // Jika tidak null, notifikasi ini hanya untuk user ini
+  targetUserId String? @map("target_user_id")
+  // Sudah dibaca oleh user?
+  isRead       Boolean @default(false) @map("is_read")
+
+  targetUser User? @relation(fields: [targetUserId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("notifications")
+}
+
+// ============================================================
+// MODEL: UDD_REGISTRATIONS
+// Antrean pendaftaran donor harian langsung di markas / UDD PMI.
+// ============================================================
+
+model UddRegistration {
+  id           String            @id @default(uuid())
+  userId       String            @map("user_id")
+  regionId     String            @map("region_id")
+  status       ParticipantStatus @default(REGISTERED)
+  scheduledFor DateTime          @default(now()) @map("scheduled_for")
+
+  registeredAt DateTime @default(now()) @map("registered_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  region UddRegion @relation(fields: [regionId], references: [id], onDelete: Cascade)
+
+  // Maksimal 1 user hanya punya 1 pendaftaran aktif di 1 UDD per tanggal tertentu
+  // Disini simpelkan: unik kombinasi userId dan regionId agar mereka tdk spam.
+  // Nantinya di API di-lock juga via status.
+  @@unique([userId, regionId])
+  @@map("udd_registrations")
+}
