@@ -37,6 +37,7 @@ export const completeProfile = async (req: Request, res: Response) => {
             city: validatedData.city,
             job: validatedData.job,
             maritalStatus: validatedData.maritalStatus,
+            bloodType: validatedData.bloodType,
         }
     });
 
@@ -73,5 +74,27 @@ export const updateBloodType = async (req: Request, res: Response) => {
              return ApiResponse.error(res, error.errors[0].message, 422);
         }
         return ApiResponse.error(res, 'Gagal memperbarui golongan darah.', 500);
+    }
+};
+
+export const updatePushToken = async (req: Request, res: Response) => {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+        return ApiResponse.unauthorized(res, 'Sesi tidak valid.');
+    }
+
+    const { pushToken } = req.body;
+    if (!pushToken || typeof pushToken !== 'string') {
+        return ApiResponse.error(res, 'pushToken tidak valid atau kosong', 400);
+    }
+
+    try {
+        await prisma.user.update({
+            where: { id: userId },
+            data: { pushToken }
+        });
+        return ApiResponse.success(res, 'Push token berhasil disimpan.', { pushToken });
+    } catch (error: any) {
+        return ApiResponse.error(res, 'Gagal menyimpan push token', 500);
     }
 };

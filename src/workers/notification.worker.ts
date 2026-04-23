@@ -132,6 +132,11 @@ export const checkDonorEligibility = async () => {
         `[REMINDER TERKIRIM] → ${name} (${profile?.whatsappNumber}) gol. darah ${profile?.bloodType} — Sudah 90 hari sejak donor.`
       );
 
+      // Jalankan Expo Push
+      import('../utils/expoPush').then(({ sendPushNotification }) => {
+          sendPushNotification([userId], '🩸 Anda Siap Donor Kembali!', `Halo ${name}! Sudah 90 hari sejak donor terakhir Anda. Yuk donasi!`);
+      });
+
       sent++;
     }
 

@@ -13,8 +13,8 @@ import { verifyToken, authorizeRole } from '../middleware/auth.middleware';
 
 const router = Router();
 
-// Semua route distribusi hanya untuk ADMIN_PMI
-router.use(verifyToken, authorizeRole('ADMIN_PMI'));
+// Semua route distribusi hanya untuk ADMIN_DISTRIBUSI
+router.use(verifyToken, authorizeRole('ADMIN_DISTRIBUSI'));
 
 // ── STOCK REQUESTS (DSD) ─────────────────────────────
 // GET  /api/v1/distribution/requests           — Semua permintaan (filter ?status=PENDING)

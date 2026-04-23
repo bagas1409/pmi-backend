@@ -217,3 +217,107 @@ export const adminDonorin = async (req: Request, res: Response) => {
         throw error;
     }
 };
+
+// ── DELETE /api/v1/users/:userId — Admin hapus akun pendonor permanen ──────────
+export const adminDeleteUser = async (req: Request, res: Response) => {
+    const userId = req.params.userId as string;
+    const adminId = (req as any).user?.id;
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+        return void ApiResponse.notFound(res, 'Pengguna tidak ditemukan.');
+    }
+    if (user.role === 'ADMIN_PMI') {
+        return void ApiResponse.error(res, 'Tidak dapat menghapus akun admin.', 403);
+    }
+
+    await prisma.$transaction(async (tx) => {
+        // Hapus profil donor (cascade ke relasi lain via FK di database)
+        await tx.donorProfile.deleteMany({ where: { userId } });
+        // Hapus user
+        await tx.user.delete({ where: { id: userId } });
+    });
+
+    logger.success(CTX, `Admin ${adminId} menghapus akun userId: ${userId}`);
+    ApiResponse.success(res, 'Akun pendonor berhasil dihapus secara permanen.');
+};
+
+// ── PATCH /api/v1/users/:userId — Admin edit biodata pendonor ────────────────
+export const adminUpdateUser = async (req: Request, res: Response) => {
+    const userId = req.params.userId as string;
+    const adminId = (req as any).user?.id;
+
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
+        include: { donorProfile: true }
+    });
+    if (!user) {
+        return void ApiResponse.notFound(res, 'Pengguna tidak ditemukan.');
+    }
+
+    const {
+        email,
+        fullName,
+        nik,
+        whatsappNumber,
+        bloodType,
+        gender,
+        birthDate,
+        birthPlace,
+        job,
+        maritalStatus,
+        address,
+        village,
+        subdistrict,
+        city,
+    } = req.body;
+
+    // Cek duplikasi email (kecuali milik sendiri)
+    if (email && email !== user.email) {
+        const dup = await prisma.user.findUnique({ where: { email } });
+        if (dup) return void ApiResponse.error(res, 'Email ini sudah digunakan akun lain.', 409);
+    }
+
+    // Cek duplikasi NIK (kecuali milik sendiri)
+    if (nik && nik !== user.donorProfile?.nik) {
+        const dupNik = await prisma.donorProfile.findUnique({ where: { nik } });
+        if (dupNik) return void ApiResponse.error(res, 'NIK ini sudah digunakan akun lain.', 409);
+    }
+
+    // Cek duplikasi WA (kecuali milik sendiri)
+    if (whatsappNumber && whatsappNumber !== user.donorProfile?.whatsappNumber) {
+        const dupWa = await prisma.donorProfile.findUnique({ where: { whatsappNumber } });
+        if (dupWa) return void ApiResponse.error(res, 'Nomor WhatsApp ini sudah digunakan akun lain.', 409);
+    }
+
+    await prisma.$transaction(async (tx) => {
+        // Update email di tabel User
+        if (email) await tx.user.update({ where: { id: userId }, data: { email } });
+
+        // Update biodata di DonorProfile
+        if (user.donorProfile) {
+            await tx.donorProfile.update({
+                where: { userId },
+                data: {
+                    ...(fullName       !== undefined && { fullName }),
+                    ...(nik            !== undefined && { nik }),
+                    ...(whatsappNumber !== undefined && { whatsappNumber }),
+                    ...(bloodType      !== undefined && { bloodType }),
+                    ...(gender         !== undefined && { gender }),
+                    ...(birthDate      !== undefined && { birthDate: new Date(birthDate) }),
+                    ...(birthPlace     !== undefined && { birthPlace }),
+                    ...(job            !== undefined && { job }),
+                    ...(maritalStatus  !== undefined && { maritalStatus }),
+                    ...(address        !== undefined && { address }),
+                    ...(village        !== undefined && { village }),
+                    ...(subdistrict    !== undefined && { subdistrict }),
+                    ...(city           !== undefined && { city }),
+                }
+            });
+        }
+    });
+
+    logger.success(CTX, `Admin ${adminId} memperbarui biodata userId: ${userId}`);
+    ApiResponse.success(res, 'Biodata pendonor berhasil diperbarui.');
+};
+

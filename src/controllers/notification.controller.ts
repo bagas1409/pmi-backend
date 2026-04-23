@@ -63,6 +63,13 @@ export const broadcastNotification = async (req: Request, res: Response) => {
         }
     });
 
+    // Jalankan service Expo Push setelah trigger record logic
+    import('../utils/expoPush').then(({ broadcastPushNotification }) => {
+        if (targetUsers === 'ALL' || !targetUsers) {
+            broadcastPushNotification(title, message);
+        }
+    });
+
     ApiResponse.created(res, 'Siar Darurat / Notifikasi berhasil dipancarkan', notif);
 };
 

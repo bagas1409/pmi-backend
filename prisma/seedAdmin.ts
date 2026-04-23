@@ -1,43 +1,54 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../src/config/prisma';
 import bcrypt from 'bcryptjs';
-
-const prisma = new PrismaClient();
 
 async function main() {
   console.log('⚙️  Memulai proses injeksi Akun Admin PMI...');
 
   const adminEmail = 'admin@pmipringsewu.org';
+  const distribusiEmail = 'distribusi@pmipringsewu.org';
   const plainPassword = 'password123'; // Ubah sesuai kebutuhan sebelum go-public
 
-  // Periksa apakah admin sudah ada
+  const salt = await bcrypt.genSalt(10);
+  const passwordHash = await bcrypt.hash(plainPassword, salt);
+
+  // --- SEED ADMIN PMI ---
   const existingAdmin = await prisma.user.findUnique({
     where: { email: adminEmail },
   });
 
-  if (existingAdmin) {
-    console.log('⚠️  Akun Admin sudah terdaftar di dalam database.');
-    console.log(`Email: ${existingAdmin.email} | Role: ${existingAdmin.role}`);
-    return;
+  if (!existingAdmin) {
+    await prisma.user.create({
+      data: {
+        email: adminEmail,
+        passwordHash,
+        role: 'ADMIN_PMI',
+        isActive: true,
+      },
+    });
+    console.log(`✅ [ADMIN_PMI] dibuat -> ${adminEmail} : ${plainPassword}`);
+  } else {
+    console.log(`⚠️  [ADMIN_PMI] sudah ada -> ${adminEmail}`);
   }
 
-  // Melakukan hashing password standar bcrypt
-  const salt = await bcrypt.genSalt(10);
-  const passwordHash = await bcrypt.hash(plainPassword, salt);
-
-  // Buat admin di tabel users (tanpa donorProfile karena dia adalah instansi)
-  const newAdmin = await prisma.user.create({
-    data: {
-      email: adminEmail,
-      passwordHash,
-      role: 'ADMIN_PMI',
-      isActive: true,
-    },
+  // --- SEED ADMIN DISTRIBUSI ---
+  const existingDistribusi = await prisma.user.findUnique({
+    where: { email: distribusiEmail },
   });
 
-  console.log('✅ Akun Admin berhasil dibuat secara permanen!');
-  console.log('-------------------------------------------');
-  console.log(`📧 Email    : ${newAdmin.email}`);
-  console.log(`🔑 Password : ${plainPassword}`);
+  if (!existingDistribusi) {
+    await prisma.user.create({
+      data: {
+        email: distribusiEmail,
+        passwordHash,
+        role: 'ADMIN_DISTRIBUSI',
+        isActive: true,
+      },
+    });
+    console.log(`✅ [ADMIN_DISTRIBUSI] dibuat -> ${distribusiEmail} : ${plainPassword}`);
+  } else {
+    console.log(`⚠️  [ADMIN_DISTRIBUSI] sudah ada -> ${distribusiEmail}`);
+  }
+
   console.log('-------------------------------------------');
   console.log('Silakan login di portal frontend: http://localhost:5173');
 }

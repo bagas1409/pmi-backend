@@ -70,11 +70,11 @@ export const getBloodStockSummary = async () => {
     orderBy: { name: 'asc' }
   });
 
-  // Feed global 20 donor terbaru dari semua UDD
+  // Feed global 100 donor terbaru dari semua UDD
   const globalFeed = await prisma.donationHistory.findMany({
     where: { regionId: { not: null } },
     orderBy: { donationDate: 'desc' },
-    take: 20,
+    take: 100,
     include: {
       user: {
         select: {
