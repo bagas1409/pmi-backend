@@ -29,7 +29,7 @@ export const sendPushNotification = async (targetUserIds: string[], title: strin
         body: message,
         // Konfigurasi Custom Sound
         sound: 'pmi_audio.wav', // Untuk iOS
-        channelId: 'default', // Wajib sinkron dengan Android NotificationChannel setup di mobile
+        channelId: 'pmi-sound-v1', // Wajib sinkron dengan Android NotificationChannel setup di mobile
     }));
 
     const chunks = expo.chunkPushNotifications(messages as any);
@@ -62,7 +62,7 @@ export const broadcastPushNotification = async (title: string, message: string) 
         title,
         body: message,
         sound: 'pmi_audio.wav',
-        channelId: 'default', 
+        channelId: 'pmi-sound-v1', 
     }));
 
     const chunks = expo.chunkPushNotifications(messages as any);
