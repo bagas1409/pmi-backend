@@ -13,27 +13,23 @@ import { verifyToken, authorizeRole } from '../middleware/auth.middleware';
 
 const router = Router();
 
-// Semua route distribusi hanya untuk ADMIN_DISTRIBUSI
-router.use(verifyToken, authorizeRole('ADMIN_DISTRIBUSI'));
+// Wajib verifikasi token dulu untuk semua route ini
+router.use(verifyToken);
+
+const requireBoth = authorizeRole('ADMIN_DISTRIBUSI', 'ADMIN_PMI');
+const requireDC = authorizeRole('ADMIN_DISTRIBUSI');
 
 // ── STOCK REQUESTS (DSD) ─────────────────────────────
-// GET  /api/v1/distribution/requests           — Semua permintaan (filter ?status=PENDING)
-// POST /api/v1/distribution/requests           — Buat permintaan baru
-// PATCH /api/v1/distribution/requests/:id/approve — Approve
-// PATCH /api/v1/distribution/requests/:id/reject  — Tolak
-
-router.get('/requests', getStockRequests);
-router.post('/requests', createStockRequest);
-router.patch('/requests/:id/approve', approveStockRequest);
-router.patch('/requests/:id/reject', rejectStockRequest);
+// ADMIN PMI butuh askes GET, APPROVE, dan REJECT
+router.get('/requests', requireBoth, getStockRequests);
+router.post('/requests', requireDC, createStockRequest);
+router.patch('/requests/:id/approve', requireBoth, approveStockRequest);
+router.patch('/requests/:id/reject', requireBoth, rejectStockRequest);
 
 // ── DISTRIBUTION CENTER ──────────────────────────────
-// GET  /api/v1/distribution/dc/stock           — Stok mentah WB + riwayat penerimaan
-// GET  /api/v1/distribution/dc/inventory       — Inventori pengolahan (matriks)
-// POST /api/v1/distribution/dc/inventory       — Tambah inventori (trigger pengurangan WB jika PRC/TC/FFP)
-
-router.get('/dc/stock', getDCStock);
-router.get('/dc/inventory', getDCInventory);
-router.post('/dc/inventory', addDCInventory);
+// HANYA UNTUK ADMIN DISTRIBUSI
+router.get('/dc/stock', requireDC, getDCStock);
+router.get('/dc/inventory', requireDC, getDCInventory);
+router.post('/dc/inventory', requireDC, addDCInventory);
 
 export default router;
