@@ -30,5 +30,6 @@ router.use('/users', require('./user.routes').default);
 router.use('/events', require('./event.routes').default);
 router.use('/notifications', require('./notification.routes').default);
 router.use('/distribution', require('./distribution.routes').default);
+router.use('/hospital', require('./hospital.routes').default);
 
 export default router;

@@ -16,6 +16,7 @@ datasource db {
 enum Role {
   ADMIN_PMI
   ADMIN_DISTRIBUSI
+  RS_SWASTA
   USER
 }
 
@@ -65,6 +66,8 @@ model User {
   eventParticipants EventParticipant[]
   notifications     Notification[]
   uddRegistrations  UddRegistration[]
+  hospitalProfile   HospitalProfile?
+  hospitalRoleRequests HospitalRoleRequest[]
 
   @@map("users")
 }
@@ -359,4 +362,130 @@ model UddRegistration {
   // Nantinya di API di-lock juga via status.
   @@unique([userId, regionId])
   @@map("udd_registrations")
+}
+
+// ============================================================
+// MODEL: HOSPITAL_PROFILES
+// Profil Rumah Sakit Swasta yang sudah terverifikasi.
+// ============================================================
+
+model HospitalProfile {
+  id           String   @id @default(uuid())
+  userId       String   @unique @map("user_id")
+  namaRs       String   @map("nama_rs")
+  noIzinRs     String   @map("no_izin_rs")
+  alamatRs     String   @map("alamat_rs")
+  noTelpRs     String   @map("no_telp_rs")
+  namaPic      String   @map("nama_pic")
+  jabatanPic   String   @map("jabatan_pic")
+  dokumenIzin  String?  @map("dokumen_izin")  // URL file dokumen
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user              User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bloodRequests     HospitalBloodRequest[]
+  dispensings       HospitalBloodDispensing[]
+
+  @@map("hospital_profiles")
+}
+
+// ============================================================
+// MODEL: HOSPITAL_ROLE_REQUESTS
+// Pengajuan upgrade role USER → RS_SWASTA. Disetujui oleh ADMIN_PMI.
+// ============================================================
+
+model HospitalRoleRequest {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  namaRs      String   @map("nama_rs")
+  noIzinRs    String   @map("no_izin_rs")
+  alamatRs    String   @map("alamat_rs")
+  noTelpRs    String   @map("no_telp_rs")
+  namaPic     String   @map("nama_pic")
+  jabatanPic  String   @map("jabatan_pic")
+  dokumenIzin String?  @map("dokumen_izin")
+  status      String   @default("PENDING")  // PENDING | APPROVED | REJECTED
+  alasanTolak String?  @map("alasan_tolak")
+  reviewedBy  String?  @map("reviewed_by")  // email ADMIN_PMI
+  reviewedAt  DateTime? @map("reviewed_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@map("hospital_role_requests")
+}
+
+// ============================================================
+// MODEL: HOSPITAL_BLOOD_REQUESTS
+// Permintaan darah dari RS Swasta ke Distribution Center PMI.
+// ============================================================
+
+enum UrgencyLevel {
+  NORMAL
+  SEGERA
+  DARURAT
+}
+
+model HospitalBloodRequest {
+  id                String       @id @default(uuid())
+  hospitalProfileId String       @map("hospital_profile_id")
+  golonganDarah     BloodType    @map("golongan_darah")
+  jenisProduk       BloodProduct @map("jenis_produk")
+  jumlahKantong     Int          @map("jumlah_kantong")
+  namaPasien        String       @map("nama_pasien")
+  noRekamMedis      String       @map("no_rekam_medis")
+  namaDokter        String       @map("nama_dokter")
+  alasanMedis       String       @map("alasan_medis")
+  tingkatUrgensi    UrgencyLevel @default(NORMAL) @map("tingkat_urgensi")
+  catatanTambahan   String?      @map("catatan_tambahan")
+  status            String       @default("PENDING")  // PENDING | DIPROSES | SIAP_DIAMBIL | SELESAI | DITOLAK
+  alasanTolak       String?      @map("alasan_tolak")
+  requestedAt       DateTime     @default(now()) @map("requested_at")
+  processedAt       DateTime?    @map("processed_at")
+  completedAt       DateTime?    @map("completed_at")
+
+  hospitalProfile HospitalProfile          @relation(fields: [hospitalProfileId], references: [id], onDelete: Cascade)
+  dispensing      HospitalBloodDispensing?
+
+  @@index([hospitalProfileId, status])
+  @@index([tingkatUrgensi, status])
+  @@map("hospital_blood_requests")
+}
+
+// ============================================================
+// MODEL: HOSPITAL_BLOOD_DISPENSINGS
+// Audit trail permanen — setiap kantong yang keluar dari DC ke RS.
+// Tabel ini bersifat APPEND-ONLY (tidak boleh diubah/hapus).
+// ============================================================
+
+model HospitalBloodDispensing {
+  id                String       @id @default(uuid())
+  requestId         String       @unique @map("request_id")
+  hospitalProfileId String       @map("hospital_profile_id")
+
+  // Denormalisasi identitas RS (agar histori tetap valid jika data RS berubah)
+  namaRs            String       @map("nama_rs")
+
+  // Data Medis
+  namaPasien        String       @map("nama_pasien")
+  noRekamMedis      String       @map("no_rekam_medis")
+  namaDokter        String       @map("nama_dokter")
+  alasanMedis       String       @map("alasan_medis")
+
+  // Detail Darah
+  golonganDarah     BloodType    @map("golongan_darah")
+  jenisProduk       BloodProduct @map("jenis_produk")
+  jumlahKantong     Int          @map("jumlah_kantong")
+
+  // Identitas Petugas
+  namaPetugasPmi    String       @map("nama_petugas_pmi")  // Nama Admin Distribusi
+  namaPengambil     String       @map("nama_pengambil")     // Yang datang ambil dari RS
+
+  dispensedAt       DateTime     @default(now()) @map("dispensed_at")
+
+  request         HospitalBloodRequest @relation(fields: [requestId], references: [id])
+  hospitalProfile HospitalProfile      @relation(fields: [hospitalProfileId], references: [id])
+
+  @@map("hospital_blood_dispensings")
 }

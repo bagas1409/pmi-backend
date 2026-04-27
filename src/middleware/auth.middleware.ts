@@ -94,14 +94,25 @@ export const optionalVerifyToken = (req: Request, res: Response, next: NextFunct
  * Contoh: authorizeRole('ADMIN_PMI', 'USER') — izinkan keduanya
  */
 export const authorizeRole = (...allowedRoles: Role[]) => {
-  return (req: Request, res: Response, next: NextFunction): void => {
-    // Jika verifyToken belum dipasang sebelumnya, req.user akan undefined
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     if (!req.user) {
       ApiResponse.unauthorized(res);
       return;
     }
 
-    const hasPermission = allowedRoles.includes(req.user.role);
+    let hasPermission = allowedRoles.includes(req.user.role as Role);
+
+    // Jika token lama masih memiliki role USER tapi backend butuh role lain, 
+    // kita cek database sekali untuk memastikan apakah role-nya sudah terupdate.
+    if (!hasPermission) {
+      const { prisma } = require('../config/prisma');
+      const freshUser = await prisma.user.findUnique({ where: { id: req.user.id } });
+      
+      if (freshUser && allowedRoles.includes(freshUser.role)) {
+        req.user.role = freshUser.role;
+        hasPermission = true;
+      }
+    }
 
     if (!hasPermission) {
       ApiResponse.forbidden(
